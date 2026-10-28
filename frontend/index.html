@@ -1,0 +1,257 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Campus 360</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f6fb;
+      color: #1d2939;
+    }
+    header {
+      background: #163b65;
+      color: white;
+      padding: 24px;
+    }
+    main {
+      max-width: 1000px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #0000000c;
+      margin-bottom: 16px;
+    }
+    .value {
+      font-size: 26px;
+      font-weight: bold;
+      margin-top: 8px;
+    }
+    input, textarea, select, button {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 10px;
+      padding: 11px;
+      border: 1px solid #ccd5e0;
+      border-radius: 7px;
+      font: inherit;
+    }
+    button {
+      background: #1765a8;
+      color: white;
+      border: 0;
+      cursor: pointer;
+    }
+    button:hover { background: #104b80; }
+    .note { color: #5b6573; font-size: 14px; }
+    li { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Smart Campus 360</h1>
+    <p>AI + IoT Smart Campus Intelligence | Apex Devs</p>
+  </header>
+
+  <main>
+    <section class="grid" id="summary">
+      <div class="card">Loading campus summary...</div>
+    </section>
+
+    <p class="note">
+      Demo notice: resource readings and locations are illustrative.
+      They are not connected to live campus sensors.
+    </p>
+
+    <section class="card">
+      <h2>Campus Connect</h2>
+      <p>Explore the planned smart-campus services.</p>
+      <ul>
+        <li>Campus buildings and route discovery</li>
+        <li>Canteen menus and sample prices</li>
+        <li>Library sections and book availability</li>
+        <li>Clubs, coordinators, and campus events</li>
+        <li>Neighbourhood services within a planned 50 km radius</li>
+      </ul>
+      <p class="note">
+        These services are represented here as a feature roadmap,
+        not as a live map or verified directory.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Report a Campus Issue</h2>
+      <form id="complaint-form">
+        <label for="category">Issue category</label>
+        <select id="category" required>
+          <option>Infrastructure</option>
+          <option>Electricity</option>
+          <option>Water</option>
+          <option>Waste</option>
+          <option>Other</option>
+        </select>
+
+        <label for="location">Campus location</label>
+        <input id="location" required minlength="2"
+               placeholder="e.g. Library block">
+
+        <label for="description">Describe the issue</label>
+        <textarea id="description" required minlength="5"
+                  maxlength="1000"
+                  placeholder="Explain the problem"></textarea>
+
+        <button type="submit">Submit complaint</button>
+      </form>
+      <p id="message" role="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>Complaint Tracker</h2>
+      <button id="refresh" type="button">Refresh complaints</button>
+      <div id="complaints">Loading complaints...</div>
+    </section>
+
+    <p class="note">
+      Prototype only. Do not submit personal, confidential, or sensitive data.
+    </p>
+  </main>
+
+  <script>
+    const summaryElement = document.getElementById("summary");
+    const complaintsElement = document.getElementById("complaints");
+    const messageElement = document.getElementById("message");
+
+    async function loadSummary() {
+      try {
+        const response = await fetch("/api/summary");
+        if (!response.ok) throw new Error("Summary unavailable");
+        const data = await response.json();
+
+        const cards = [
+          ["Electricity", `${data.electricity_kwh} kWh`],
+          ["Water", `${data.water_litres} litres`],
+          ["Waste bin alerts", data.waste_bins_alert],
+          ["Open complaints", data.open_complaints]
+        ];
+
+        summaryElement.replaceChildren();
+        cards.forEach(([label, value]) => {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          const title = document.createElement("div");
+          title.textContent = label;
+
+          const number = document.createElement("div");
+          number.className = "value";
+          number.textContent = value;
+
+          card.append(title, number);
+          summaryElement.append(card);
+        });
+      } catch (error) {
+        summaryElement.textContent = "Could not load the campus summary.";
+      }
+    }
+
+    async function loadComplaints() {
+      try {
+        const response = await fetch("/api/complaints");
+        if (!response.ok) throw new Error("Request failed");
+        const complaints = await response.json();
+
+        complaintsElement.replaceChildren();
+
+        if (complaints.length === 0) {
+          complaintsElement.textContent = "No complaints have been submitted.";
+          return;
+        }
+
+        complaints.forEach(item => {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          const title = document.createElement("strong");
+          title.textContent = `#${item.id} — ${item.category}`;
+
+          const details = document.createElement("p");
+          details.textContent = `${item.location}: ${item.description}`;
+
+          const status = document.createElement("p");
+          status.textContent = `Status: ${item.status}`;
+
+          card.append(title, details, status);
+
+          if (item.status !== "Resolved") {
+            const button = document.createElement("button");
+            button.textContent = "Mark resolved";
+            button.addEventListener("click", async () => {
+              const result = await fetch(
+                `/api/complaints/${item.id}/resolve`,
+                { method: "PATCH" }
+              );
+              if (result.ok) loadComplaints();
+            });
+            card.append(button);
+          }
+
+          complaintsElement.append(card);
+        });
+      } catch (error) {
+        complaintsElement.textContent = "Could not load complaints.";
+      }
+    }
+
+    document.getElementById("complaint-form")
+      .addEventListener("submit", async event => {
+        event.preventDefault();
+        messageElement.textContent = "Submitting...";
+
+        const payload = {
+          category: document.getElementById("category").value,
+          location: document.getElementById("location").value,
+          description: document.getElementById("description").value
+        };
+
+        try {
+          const response = await fetch("/api/complaints", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.detail || "Submission failed");
+          }
+
+          messageElement.textContent =
+            `Complaint #${result.id} recorded successfully.`;
+          event.target.reset();
+          await loadSummary();
+          await loadComplaints();
+        } catch (error) {
+          messageElement.textContent = error.message;
+        }
+      });
+
+    document.getElementById("refresh")
+      .addEventListener("click", loadComplaints);
+
+    loadSummary();
+    loadComplaints();
+  </script>
+</body>
+</html>
